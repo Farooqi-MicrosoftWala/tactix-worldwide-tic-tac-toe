@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>TacTix — Worldwide Tic-Tac-Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root{
+  --bg:#0C0F1A; --bg-2:#11162A; --surface:#161B30; --surface-2:#1D2340;
+  --line:#2A3055; --text:#EDEFF7; --muted:#8A90AC; --muted-2:#5D6288;
+  --x:#4CC9F0; --x-glow:#4CC9F0aa; --o:#FFB454; --o-glow:#FFB454aa;
+  --win:#7CF29C; --danger:#FF6B7A; --accent:#8C7CFF;
+  --radius:16px; --radius-sm:10px;
+  --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+  --dur:180ms;
+}
+[data-theme="light"]{
+  --bg:#F3F4FB; --bg-2:#E9EBFA; --surface:#FFFFFF; --surface-2:#F0F1FC;
+  --line:#DCDFF3; --text:#191C2E; --muted:#5F6386; --muted-2:#8488A6;
+  --shadow:0 10px 30px rgba(30,32,70,.10);
+}
+[data-theme="neon"]{
+  --bg:#050507; --bg-2:#0A0A0F; --surface:#0F0F16; --surface-2:#15151F;
+  --line:#26263A; --text:#F2F2FF; --muted:#8B8BA8;
+  --x:#00F0FF; --x-glow:#00F0FFcc; --o:#FF2E97; --o-glow:#FF2E97cc;
+  --win:#B6FF3C; --accent:#B6FF3C;
+  --shadow:0 0 40px rgba(0,240,255,.08);
+}
+[data-theme="glass"]{
+  --bg:#1B1039; --bg-2:#2A1657; --surface:rgba(255,255,255,.07); --surface-2:rgba(255,255,255,.11);
+  --line:rgba(255,255,255,.16); --text:#F5F3FF; --muted:#C6BEEA;
+  --x:#7CE3FF; --o:#FFCB7C; --win:#9BFFC9; --accent:#C79CFF;
+  --shadow:0 20px 60px rgba(20,0,50,.4);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;overflow-x:hidden;}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, var(--bg-2), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, var(--bg-2), transparent 55%),
+    var(--bg);
+  color:var(--text); font-family:var(--font-body); min-height:100vh;
+  transition:background var(--dur), color var(--dur);
+}
+[data-theme="glass"] body{ background: linear-gradient(160deg,#1B1039,#2A1657 55%,#3A1B6B); background-attachment:fixed;}
+h1,h2,h3{font-family:var(--font-display); margin:0;}
+button{font-family:var(--font-body); cursor:pointer;}
+.mono{font-family:var(--font-mono);}
+.hidden{display:none !important;}
+::selection{background:var(--accent); color:#111;}
+
+#app{max-width:1080px;margin:0 auto;padding:20px 18px 60px;}
+.screen{animation:fadeIn .32s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+/* Topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
+.brand{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.brand .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--x),var(--accent));display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:#0b0d18;font-size:16px;}
+.brand .word{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:.2px;}
+.top-actions{display:flex;gap:8px;}
+.icon-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform var(--dur),background var(--dur);}
+.icon-btn:hover{transform:translateY(-1px);background:var(--surface-2);}
+.icon-btn:active{transform:scale(.94);}
+
+/* Card / buttons generic */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);}
+.btn{border:1px solid var(--line);background:var(--surface-2);color:var(--text);padding:11px 18px;border-radius:12px;font-weight:600;font-size:14.5px;transition:transform var(--dur),background var(--dur),border-color var(--dur);}
+.btn:hover{transform:translateY(-1px);border-color:var(--accent);}
+.btn:active{transform:scale(.97);}
+.btn.primary{background:linear-gradient(135deg,var(--x),var(--accent));color:#0b0d18;border:none;}
+.btn.ghost{background:transparent;}
+.btn.danger{border-color:var(--danger);color:var(--danger);background:transparent;}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;}
+
+/* HOME */
+.hero{text-align:center;padding:26px 10px 8px;}
+.hero h1{font-size:clamp(34px,7vw,54px);letter-spacing:-.5px;background:linear-gradient(135deg,var(--text),var(--muted));-webkit-background-clip:text;background-clip:text;}
+.hero p.tag{color:var(--muted);font-weight:600;letter-spacing:.4px;margin-top:8px;font-size:14px;text-transform:uppercase;}
+.tag span{color:var(--accent);}
+
+.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0;}
+@media(max-width:760px){.mode-grid{grid-template-columns:1fr;}}
+.mode-card{padding:24px 20px;text-align:left;position:relative;overflow:hidden;transition:transform var(--dur),border-color var(--dur);}
+.mode-card:hover{transform:translateY(-3px);border-color:var(--accent);}
+.mode-card .emoji{font-size:30px;}
+.mode-card h3{font-size:19px;margin-top:12px;}
+.mode-card p{color:var(--muted);font-size:13.5px;margin:6px 0 0;line-height:1.5;}
+.mode-card .go{position:absolute;right:18px;top:20px;color:var(--muted-2);font-size:18px;}
+
+.quick-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px;}
+@media(max-width:640px){.quick-row{grid-template-columns:1fr;}}
+.quick-card{padding:16px;display:flex;align-items:center;gap:12px;transition:transform var(--dur);}
+.quick-card:hover{transform:translateY(-2px);}
+.quick-card .qi{font-size:20px;}
+.quick-card .qt{font-weight:700;font-size:14px;}
+.quick-card .qs{color:var(--muted);font-size:12px;}
+
+/* Setup screens */
+.panel{padding:22px;margin-bottom:16px;}
+.panel h2{font-size:20px;margin-bottom:4px;}
+.panel .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:7px;}
+.field input[type=text]{width:100%;padding:11px 13px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--text);font-size:14.5px;font-family:var(--font-body);}
+.field input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px;}
+.pillrow{display:flex;gap:8px;flex-wrap:wrap;}
+.pill{padding:9px 15px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);font-size:13.5px;font-weight:600;color:var(--text);}
+.pill[aria-pressed="true"]{border-color:var(--accent);background:var(--accent);color:#0b0d18;}
+.pill:focus-visible, .btn:focus-visible, .icon-btn:focus-visible, .cell:focus-visible{outline:3px solid var(--accent);outline-offset:2px;}
+.avatar-grid{display:flex;gap:8px;flex-wrap:wrap;}
+.avatar-opt{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:19px;display:flex;align-items:center;justify-content:center;}
+.avatar-opt[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:640px){.two-col{grid-template-columns:1fr;}}
+
+/* Game screen */
+.match-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.player-chip{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:12px;background:var(--surface);border:1px solid var(--line);min-width:150px;}
+.player-chip.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.player-chip .av{font-size:19px;}
+.player-chip .nm{font-weight:700;font-size:13.5px;}
+.player-chip .mk{font-size:11px;color:var(--muted);font-family:var(--font-mono);}
+.player-chip.x .mk{color:var(--x);} .player-chip.o .mk{color:var(--o);}
+.vs{font-family:var(--font-display);color:var(--muted-2);font-weight:700;}
+
+.scoreboard{display:flex;justify-content:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.score-pill{padding:8px 16px;border-radius:12px;background:var(--surface);border:1px solid var(--line);text-align:center;min-width:76px;}
+.score-pill .n{font-family:var(--font-mono);font-weight:700;font-size:18px;}
+.score-pill .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;}
+.score-pill.x .n{color:var(--x);} .score-pill.o .n{color:var(--o);}
+
+.timerbar{height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-bottom:14px;max-width:340px;margin-left:auto;margin-right:auto;}
+.timerbar .fill{height:100%;background:linear-gradient(90deg,var(--x),var(--accent));width:100%;transition:width .2s linear;}
+.timerbar.low .fill{background:var(--danger);}
+
+.board-wrap{display:flex;justify-content:center;margin:10px 0 18px;}
+.board{display:grid;gap:8px;width:min(92vw,420px);aspect-ratio:1/1;}
+.cell{
+  background:var(--surface-2);border:1px solid var(--line);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-weight:700;
+  cursor:pointer;position:relative;transition:background var(--dur),transform 100ms;
+  user-select:none;
+}
+.cell:hover:not(.filled){background:var(--surface);border-color:var(--accent);}
+.cell:active:not(.filled){transform:scale(.95);}
+.cell.filled{cursor:default;}
+.cell .mark{display:inline-block;animation:pop .28s cubic-bezier(.2,1.4,.4,1);}
+@keyframes pop{from{transform:scale(0) rotate(-15deg);opacity:0;}to{transform:scale(1) rotate(0);opacity:1;}}
+.cell.x .mark{color:var(--x);text-shadow:0 0 18px var(--x-glow);}
+.cell.o .mark{color:var(--o);text-shadow:0 0 18px var(--o-glow);}
+.cell.winning{background:color-mix(in srgb, var(--win) 18%, var(--surface-2));border-color:var(--win);animation:winPulse 1s ease-in-out infinite;}
+@keyframes winPulse{0%,100%{box-shadow:0 0 0 0 var(--win);}50%{box-shadow:0 0 14px 2px var(--win);}}
+.cell.hint{outline:2px dashed var(--muted-2);outline-offset:-4px;}
+
+.status-line{text-align:center;font-weight:700;font-size:15px;min-height:24px;margin-bottom:6px;color:var(--muted);}
+.status-line.thinking{color:var(--accent);}
+.dots::after{content:'';animation:dots 1.2s steps(4,end) infinite;}
+@keyframes dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}}
+
+.game-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:6px;}
+
+/* Overlay result */
+.overlay{position:fixed;inset:0;background:rgba(4,5,12,.62);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;animation:fadeIn .25s ease;padding:16px;}
+.result-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:34px 30px;text-align:center;max-width:360px;width:100%;box-shadow:var(--shadow);animation:resultPop .35s cubic-bezier(.2,1.4,.4,1);}
+@keyframes resultPop{from{transform:scale(.85);opacity:0;}to{transform:scale(1);opacity:1;}}
+.result-card .big{font-size:44px;}
+.result-card h2{font-size:24px;margin:10px 0 4px;}
+.result-card p{color:var(--muted);font-size:13.5px;margin-bottom:20px;}
+.result-card .delta{font-family:var(--font-mono);font-weight:700;font-size:15px;margin-bottom:14px;}
+.delta.up{color:var(--win);} .delta.down{color:var(--danger);}
+
+/* Leaderboard */
+.lb-row{display:grid;grid-template-columns:36px 1fr auto auto;gap:12px;align-items:center;padding:11px 8px;border-bottom:1px solid var(--line);}
+.lb-row:last-child{border-bottom:none;}
+.lb-rank{font-family:var(--font-mono);font-weight:700;color:var(--muted);text-align:center;}
+.lb-name{font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;}
+.lb-rating{font-family:var(--font-mono);font-weight:700;color:var(--accent);}
+.lb-record{font-size:11.5px;color:var(--muted);font-family:var(--font-mono);}
+
+/* Stats */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+.stat-box{padding:16px;text-align:center;}
+.stat-box .v{font-family:var(--font-mono);font-weight:700;font-size:22px;color:var(--accent);}
+.stat-box .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:3px;}
+
+/* History */
+.hist-row{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);font-size:13px;gap:8px;flex-wrap:wrap;}
+.hist-row:last-child{border-bottom:none;}
+.hist-badge{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;}
+.hist-badge.win{background:color-mix(in srgb, var(--win) 20%, transparent);color:var(--win);}
+.hist-badge.loss{background:color-mix(in srgb, var(--danger) 20%, transparent);color:var(--danger);}
+.hist-badge.draw{background:var(--surface-2);color:var(--muted);}
+
+/* Online status */
+.status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
+.status-dot.online{background:var(--win);box-shadow:0 0 6px var(--win);}
+.status-dot.searching{background:#FFD166;animation:blink 1s infinite;}
+.status-dot.offline{background:var(--danger);}
+@keyframes blink{50%{opacity:.3;}}
+.spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.roomcode{font-family:var(--font-mono);font-size:28px;font-weight:700;letter-spacing:6px;text-align:center;padding:16px;background:var(--surface-2);border-radius:12px;border:1px dashed var(--line);margin:14px 0;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--line);padding:12px 18px;border-radius:12px;box-shadow:var(--shadow);font-size:13.5px;font-weight:600;z-index:80;animation:toastIn .25s ease;max-width:88vw;}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px);}to{opacity:1;transform:translate(-50%,0);}}
+
+.section-title{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
+.section-title h2{font-size:18px;}
+.confetti-piece{position:fixed;top:-10px;width:8px;height:14px;z-index:60;animation:fall linear forwards;}
+@keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:.9;}}
+.back-link{color:var(--muted);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:5px;margin-bottom:14px;}
+.back-link:hover{color:var(--text);}
+.footnote{color:var(--muted-2);font-size:11.5px;text-align:center;margin-top:8px;}
+a{color:inherit;}
+.switch{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);}
+.switch:last-child{border-bottom:none;}
+.switch .label{font-weight:600;font-size:14px;}
+.switch .desc{font-size:12px;color:var(--muted);}
+.toggle{width:44px;height:25px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);position:relative;transition:background var(--dur);}
+.toggle[aria-pressed="true"]{background:var(--accent);}
+.toggle .knob{position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:var(--text);transition:transform var(--dur);}
+.toggle[aria-pressed="true"] .knob{transform:translateX(19px);background:#0b0d18;}
+</style>
+</head>
+<body data-theme="classic">
+<div id="app"></div>
+<div id="overlayRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* ============================================================
+   STORAGE MODULE — persists settings, stats, profile, history
+   ============================================================ */
+const Storage = (() => {
+  const KEY = 'tactix_v1';
+  const defaults = {
+    profile: { name: 'Player', mark: 'X', avatar: '🦊', country: '🌐' },
+    settings: { theme: 'classic', mode: 'dark', sound: true, animations: true },
+    stats: { total: 0, wins: 0, losses: 0, draws: 0, streak: 0, bestStreak: 0, rating: 1200 },
+    history: [] // {opponent, date, mode, result, ratingChange, duration}
+  };
+  let data = load();
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(!raw) return structuredClone(defaults);
+      const parsed = JSON.parse(raw);
+      return { ...structuredClone(defaults), ...parsed,
+        profile:{...defaults.profile, ...parsed.profile},
+        settings:{...defaults.settings, ...parsed.settings},
+        stats:{...defaults.stats, ...parsed.stats} };
+    }catch(e){ return structuredClone(defaults); }
+  }
+  function save(){ localStorage.setItem(KEY, JSON.stringify(data)); }
+  return {
+    get: () => data,
+    save,
+    setProfile(p){ Object.assign(data.profile, p); save(); },
+    setSettings(s){ Object.assign(data.settings, s); save(); },
+    recordResult(result, ratingChange, meta){ // result: 'win'|'loss'|'draw'
+      const st = data.stats;
+      st.total++;
+      if(result==='win'){ st.wins++; st.streak = st.streak>=0?st.streak+1:1; }
+      else if(result==='loss'){ st.losses++; st.streak = st.streak<=0?st.streak-1:-1; }
+      else { st.draws++; st.streak = 0; }
+      st.bestStreak = Math.max(st.bestStreak, st.streak);
+      if(typeof ratingChange === 'number') st.rating = Math.max(100, st.rating + ratingChange);
+      data.history.unshift({
+        opponent: meta.opponent||'—', date: new Date().toISOString(),
+        mode: meta.mode||'Local', result, ratingChange: ratingChange||0,
+        duration: meta.duration||0
+      });
+      data.history = data.history.slice(0, 50);
+      save();
+    },
+    resetAll(){ data = structuredClone(defaults); save(); }
+  };
+})();
+
+/* ============================================================
+   SOUND MODULE — synthesized via WebAudio, no external assets
+   ============================================================ */
+const Sound = (() => {
+  let ctx;
+  function ensureCtx(){ if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)(); return ctx; }
+  function tone(freq, dur, type='sine', vol=.08, delay=0){
+    if(!Storage.get().settings.sound) return;
+    try{
+      const c = ensureCtx();
+      const t0 = c.currentTime + delay;
+      const osc = c.createOscillator(); const gain = c.createGain();
+      osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(vol, t0+.01);
+      gain.gain.exponentialRampToValueAtTime(.0001, t0+dur);
+      osc.connect(gain); gain.connect(c.destination);
+      osc.start(t0); osc.stop(t0+dur+.02);
+    }catch(e){}
+  }
+  return {
+    click: () => tone(320,.06,'square',.05),
+    moveX: () => tone(520,.12,'sine'),
+    moveO: () => tone(390,.14,'sine'),
+    aiMove: () => tone(300,.09,'triangle'),
+    win: () => { tone(523,.14,'sine'); tone(659,.14,'sine',.08,.12); tone(784,.22,'sine',.09,.24); },
+    draw: () => { tone(300,.18,'sawtooth',.05); tone(250,.2,'sawtooth',.05,.1); },
+    found: () => { tone(440,.1,'sine'); tone(660,.14,'sine',.08,.1); },
+    countdown: () => tone(220,.08,'square',.06),
+    matchStart: () => { tone(392,.08,'sine'); tone(523,.1,'sine',.08,.08); }
+  };
+})();
+
+/* ============================================================
+   GAME ENGINE — board state, win detection (configurable N & win length)
+   ============================================================ */
+function createGame(size, winLen){
+  const cells = Array(size*size).fill(null);
+  return {
+    size, winLen, cells,
+    current: 'X',
+    winner: null, winningLine: null, isDraw: false,
+    history: [], // for undo: {index, mark}
+    place(idx){
+      if(this.cells[idx] || this.winner || this.isDraw) return false;
+      this.cells[idx] = this.current;
+      this.history.push({index: idx, mark: this.current});
+      const line = checkWinner(this.cells, this.size, this.winLen, idx);
+      if(line){ this.winner = this.current; this.winningLine = line; }
+      else if(this.cells.every(c=>c)){ this.isDraw = true; }
+      else { this.current = this.current==='X'?'O':'X'; }
+      return true;
+    },
+    undo(){
+      const last = this.history.pop();
+      if(!last) return false;
+      this.cells[last.index] = null;
+      this.current = last.mark;
+      this.winner = null; this.winningLine = null; this.isDraw = false;
+      return true;
+    },
+    clone(){
+      const g = createGame(this.size, this.winLen);
+      g.cells = this.cells.slice(); g.current = this.current;
+      g.winner = this.winner; g.winningLine = this.winningLine; g.isDraw = this.isDraw;
+      return g;
+    }
+  };
+}
+function checkWinner(cells, size, winLen, lastIdx){
+  const r0 = Math.floor(lastIdx/size), c0 = lastIdx%size;
+  const mark = cells[lastIdx];
+  if(!mark) return null;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for(const [dr,dc] of dirs){
+    let line = [lastIdx];
+    for(const s of [1,-1]){
+      let r=r0+dr*s, c=c0+dc*s;
+      while(r>=0&&r<size&&c>=0&&c<size && cells[r*size+c]===mark){
+        line.push(r*size+c); r+=dr*s; c+=dc*s;
+      }
+    }
+    if(line.length>=winLen) return line;
+  }
+  return null;
+}
+function emptyIndices(cells){ const out=[]; for(let i=0;i<cells.length;i++) if(!cells[i]) out.push(i); return out; }
+
+/* ============================================================
+   AI MODULE — Easy (random), Medium (heuristic), Hard (minimax/ab)
+   ============================================================ */
+const AI = (() => {
+  function randomMove(game){
+    const e = emptyIndices(game.cells);
+    return e[Math.floor(Math.random()*e.length)];
+  }
+  function findImmediateWin(game, mark){
+    for(const idx of emptyIndices(game.cells)){
+      const g = game.clone(); g.current = mark; g.place(idx);
+      if(g.winner===mark) return idx;
+    }
+    return null;
+  }
+  function heuristicMove(game){
+    const me = game.current, opp = me==='X'?'O':'X';
+    // win if possible
+    let idx = findImmediateWin(game, me); if(idx!=null) return idx;
+    // block opponent
+    idx = findImmediateWin(game, opp); if(idx!=null) return idx;
+    // center-ish preference, then corners, then edges (works reasonably for any size)
+    const size = game.size;
+    const center = Math.floor(size/2);
+    const centerIdx = center*size+center;
+    if(!game.cells[centerIdx] && size%2===1) return centerIdx;
+    const corners = [0, size-1, size*(size-1), size*size-1].filter(i=>!game.cells[i]);
+    if(corners.length) return corners[Math.floor(Math.random()*corners.length)];
+    return randomMove(game);
+  }
+  // Minimax with alpha-beta, depth-limited for boards larger than 3x3 for performance
+  function minimax(game, aiMark, depth, alpha, beta, maxDepth){
+    if(game.winner) return game.winner===aiMark ? 100-depth : depth-100;
+    if(game.isDraw || depth>=maxDepth) return evaluateHeuristic(game, aiMark);
+    const maximizing = game.current === aiMark;
+    let best = maximizing ? -Infinity : Infinity;
+    for(const idx of emptyIndices(game.cells)){
+      const g = game.clone(); g.place(idx);
+      const score = minimax(g, aiMark, depth+1, alpha, beta, maxDepth);
+      if(maximizing){ best = Math.max(best, score); alpha = Math.max(alpha, best); }
+      else { best = Math.min(best, score); beta = Math.min(beta, best); }
+      if(beta<=alpha) break;
+    }
+    return best;
+  }
+  function evaluateHeuristic(game, aiMark){
+    // simple positional heuristic for depth-limited cutoffs on large boards
+    const oppMark = aiMark==='X'?'O':'X';
+    let score = 0;
+    const size = game.size;
+    for(let i=0;i<game.cells.length;i++){
+      if(game.cells[i]===aiMark) score += (i%size===Math.floor(size/2)||Math.floor(i/size)===Math.floor(size/2))?2:1;
+      else if(game.cells[i]===oppMark) score -= (i%size===Math.floor(size/2)||Math.floor(i/size)===Math.floor(size/2))?2:1;
+    }
+    return score;
+  }
+  function hardMove(game){
+    const aiMark = game.current;
+    const empties = emptyIndices(game.cells);
+    // full minimax for 3x3 (fast, unbeatable); depth-limited for larger boards
+    const maxDepth = game.size===3 ? 9 : (game.size===4 ? 4 : 3);
+    let bestScore = -Infinity, bestMoves = [];
+    for(const idx of empties){
+      const g = game.clone(); g.place(idx);
+      const score = minimax(g, aiMark, 1, -Infinity, Infinity, maxDepth);
+      if(score>bestScore){ bestScore=score; bestMoves=[idx]; }
+      else if(score===bestScore){ bestMoves.push(idx); }
+    }
+    return bestMoves[Math.floor(Math.random()*bestMoves.length)];
+  }
+  return {
+    getMove(game, difficulty){
+      if(difficulty==='easy'){
+        // 80% random, 20% block-or-win for slight competence
+        if(Math.random()<0.25){
+          const me=game.current, opp=me==='X'?'O':'X';
+          const w = findImmediateWin(game, me); if(w!=null) return w;
+        }
+        return randomMove(game);
+      }
+      if(difficulty==='medium') return heuristicMove(game);
+      return hardMove(game);
+    }
+  };
+})();
+</script>
+
+<script>
+/* ============================================================
+   ONLINE MODULE — connects to Socket.io backend (server-authoritative)
+   The backend code + deployment instructions are provided as a
+   separate downloadable project (see README). This module degrades
+   gracefully with clear error states when no backend is reachable.
+   ============================================================ */
+const Online = (() => {
+  let socket = null;
+  let serverUrl = localStorage.getItem('tactix_server_url') || '';
+  let listeners = {};
+  function on(evt, fn){ (listeners[evt]=listeners[evt]||[]).push(fn); }
+  function emitLocal(evt, payload){ (listeners[evt]||[]).forEach(fn=>fn(payload)); }
+  function connect(url){
+    return new Promise((resolve, reject)=>{
+      if(!url){ reject(new Error('no_url')); return; }
+      try{
+        if(socket){ socket.disconnect(); }
+        socket = io(url, { transports:['websocket','polling'], reconnectionAttempts: 3, timeout: 6000 });
+        const t = setTimeout(()=>{ reject(new Error('timeout')); }, 7000);
+        socket.on('connect', ()=>{ clearTimeout(t); serverUrl=url; localStorage.setItem('tactix_server_url', url); resolve(); });
+        socket.on('connect_error', (e)=>{ clearTimeout(t); reject(e); });
+        ['matched','opponent_left','move_made','room_created','room_error','game_over','room_joined','waiting','reconnected','error_message']
+          .forEach(evt => socket.on(evt, (data)=> emitLocal(evt, data)));
+      }catch(e){ reject(e); }
+    });
+  }
+  function isConnected(){ return !!(socket && socket.connected); }
+  function send(evt, payload){ if(socket && socket.connected) socket.emit(evt, payload); }
+  function disconnect(){ if(socket) socket.disconnect(); socket=null; }
+  return { connect, isConnected, send, on, disconnect, getServerUrl:()=>serverUrl };
+})();
+</script>
+
+<script>
+/* ============================================================
+   UI / APP MODULE — screens, rendering, wiring
+   ============================================================ */
+const App = (() => {
+  const root = document.getElementById('app');
+  const overlayRoot = document.getElementById('overlayRoot');
+  const toastRoot = document.getElementById('toastRoot');
+  let state = {
+    screen: 'home',
+    setup: { mode:null, size:3, winLen:3, timer:'none', customTimer:30, bestOf:1, difficulty:'medium',
+             p1:{name:'Player 1', mark:'X', avatar:'🦊'}, p2:{name:'Player 2', mark:'O', avatar:'🐼'},
+             firstMove:'p1' },
+    match: null, // live match state
+  };
+
+  function applyTheme(){
+    const s = Storage.get().settings;
+    document.body.setAttribute('data-theme', s.theme);
+    document.documentElement.style.colorScheme = s.mode;
+    if(s.theme==='classic'){
+      if(s.mode==='light') document.body.setAttribute('data-theme','light');
+      else document.body.setAttribute('data-theme','classic');
+    }
+  }
+
+  function toast(msg, ms=2600){
+    const el = document.createElement('div');
+    el.className='toast'; el.textContent = msg;
+    toastRoot.appendChild(el);
+    setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, ms);
+  }
+
+  function go(screen){ state.screen = screen; render(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+  /* ---------- HOME ---------- */
+  function screenHome(){
+    const stats = Storage.get().stats;
+    return `
+    <div class="screen">
+      <div class="topbar">
+        <div class="brand" onclick="App.go('home')">
+          <div class="mark">TT</div><div class="word">TacTix</div>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" title="Statistics" onclick="App.go('stats')">📊</button>
+          <button class="icon-btn" title="Settings" onclick="App.go('settings')">⚙️</button>
+        </div>
+      </div>
+      <div class="hero">
+        <h1>TIC · TAC · TOE</h1>
+        <p class="tag">Play <span>·</span> Challenge <span>·</span> Compete <span>·</span> Win</p>
+      </div>
+      <div class="mode-grid">
+        <button class="card mode-card" onclick="App.startSetup('local')">
+          <div class="emoji">👥</div><h3>Local 2 Player</h3>
+          <p>Pass-and-play on one device. Pick names, marks, and who goes first.</p>
+          <div class="go">→</div>
+        </button>
+        <button class="card mode-card" onclick="App.startSetup('ai')">
+          <div class="emoji">🤖</div><h3>Play Against AI</h3>
+          <p>Easy, Medium, or an unbeatable Minimax-driven Hard mode.</p>
+          <div class="go">→</div>
+        </button>
+        <button class="card mode-card" onclick="App.startSetup('online')">
+          <div class="emoji">🌍</div><h3>Online Worldwide</h3>
+          <p>Quick match or private rooms, synced in real time over a server.</p>
+          <div class="go">→</div>
+        </button>
+      </div>
+      <div class="section-title"><h2>🏆 Global Leaderboard</h2><button class="btn ghost" onclick="App.go('leaderboard')">View all</button></div>
+      <div class="card" style="padding:6px 16px;">${leaderboardPreviewRows()}</div>
+      <div class="section-title"><h2>📊 My Statistics</h2><button class="btn ghost" onclick="App.go('stats')">Details</button></div>
+      <div class="stat-grid">
+        <div class="card stat-box"><div class="v">${stats.total}</div><div class="l">Games</div></div>
+        <div class="card stat-box"><div class="v">${stats.wins}</div><div class="l">Wins</div></div>
+        <div class="card stat-box"><div class="v">${winPct(stats)}%</div><div class="l">Win rate</div></div>
+        <div class="card stat-box"><div class="v">⭐${stats.rating}</div><div class="l">Rating</div></div>
+      </div>
+      <p class="footnote">Local &amp; AI modes run fully offline. Online Worldwide needs a TacTix server connection — see Settings → Server.</p>
+    </div>`;
+  }
+  function winPct(st){ return st.total? Math.round(st.wins/st.total*100):0; }
+  function leaderboardPreviewRows(){
+    const rows = localLeaderboard().slice(0,3);
+    if(!rows.length) return `<div style="padding:16px 0;color:var(--muted);font-size:13px;">No ranked matches yet. Play Online Worldwide to appear on the board.</div>`;
+    const medals=['🥇','🥈','🥉'];
+    return rows.map((r,i)=>`<div class="lb-row"><div class="lb-rank">${medals[i]}</div><div class="lb-name">${r.avatar} ${r.name}</div><div class="lb-rating">⭐${r.rating}</div><div class="lb-record">${r.wins}W-${r.losses}L-${r.draws}D</div></div>`).join('');
+  }
+  function localLeaderboard(){
+    // Local-only leaderboard built from this browser's profile + recorded online matches.
+    // A true global leaderboard requires the shared backend (see README) aggregating all players.
+    const p = Storage.get().profile, st = Storage.get().stats;
+    if(st.total===0) return [];
+    return [{ name:p.name, avatar:p.avatar, rating:st.rating, wins:st.wins, losses:st.losses, draws:st.draws }];
+  }
+
+  /* ---------- SETUP ---------- */
+  function startSetup(mode){
+    state.setup.mode = mode;
+    go('setup');
+  }
+  function screenSetup(){
+    const s = state.setup;
+    if(s.mode==='online') return screenOnlineHub();
+    const isLocal = s.mode==='local';
+    return `
+    <div class="screen">
+      ${topbarSimple(isLocal?'Local 2 Player':'Play Against AI')}
+      <div class="two-col">
+        <div class="card panel">
+          <h2>Players</h2>
+          <div class="sub">${isLocal? 'Set up both players.' : 'Set up your profile and the AI difficulty.'}</div>
+          ${playerEditor('p1', isLocal? 'Player 1':'You')}
+          ${isLocal? playerEditor('p2','Player 2') : aiDifficultyPicker()}
+          <div class="field">
+            <label>Who goes first</label>
+            <div class="pillrow">
+              <button class="pill" aria-pressed="${s.firstMove==='p1'}" onclick="App.setFirst('p1')">${isLocal? s.p1.name : s.p1.name}</button>
+              <button class="pill" aria-pressed="${s.firstMove==='p2'}" onclick="App.setFirst('p2')">${isLocal? s.p2.name : 'AI'}</button>
+              <button class="pill" aria-pressed="${s.firstMove==='random'}" onclick="App.setFirst('random')">🎲 Random</button>
+            </div>
+          </div>
+        </div>
+        <div class="card panel">
+          <h2>Match Rules</h2>
+          <div class="sub">Board size, timer, and series length.</div>
+          <div class="field">
+            <label>Board</label>
+            <div class="pillrow">
+              <button class="pill" aria-pressed="${s.size===3}" onclick="App.setBoard(3,3)">3×3 Classic</button>
+              <button class="pill" aria-pressed="${s.size===4}" onclick="App.setBoard(4,4)">4×4 Advanced</button>
+              <button class="pill" aria-pressed="${s.size===5}" onclick="App.setBoard(5,5)">5×5 Expert</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Timer per move</label>
+            <div class="pillrow">
+              <button class="pill" aria-pressed="${s.timer==='none'}" onclick="App.setTimer('none')">No Timer</button>
+              <button class="pill" aria-pressed="${s.timer==='30'}" onclick="App.setTimer('30')">30s</button>
+              <button class="pill" aria-pressed="${s.timer==='60'}" onclick="App.setTimer('60')">60s</button>
+              <button class="pill" aria-pressed="${s.timer==='custom'}" onclick="App.setTimer('custom')">Custom</button>
+            </div>
+            ${s.timer==='custom'?`<div style="margin-top:10px;"><input type="text" inputmode="numeric" value="${s.customTimer}" oninput="App.setCustomTimer(this.value)" style="width:100px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);color:var(--text);"> seconds</div>`:''}
+          </div>
+          <div class="field">
+            <label>Series</label>
+            <div class="pillrow">
+              <button class="pill" aria-pressed="${s.bestOf===1}" onclick="App.setBestOf(1)">Single Match</button>
+              <button class="pill" aria-pressed="${s.bestOf===3}" onclick="App.setBestOf(3)">Best of 3</button>
+              <button class="pill" aria-pressed="${s.bestOf===5}" onclick="App.setBestOf(5)">Best of 5</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row" style="justify-content:center;margin-top:6px;">
+        <button class="btn primary" onclick="App.beginMatch()">Start Match →</button>
+      </div>
+    </div>`;
+  }
+  function topbarSimple(title){
+    return `<a href="#" class="back-link" onclick="App.go('home');return false;">← Home</a><div class="section-title" style="margin-top:0;"><h2>${title}</h2></div>`;
+  }
+  const AVATARS = ['🦊','🐼','🐯','🐸','🐧','🦁','🐨','🐵','🦉','🐺','🐙','🦄'];
+  function playerEditor(key, defaultLabel){
+    const s = state.setup; const p = s[key];
+    return `
+      <div style="padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;">
+        <div class="field" style="margin-bottom:12px;">
+          <label>${defaultLabel} name</label>
+          <input type="text" value="${p.name}" maxlength="16" oninput="App.updatePlayer('${key}','name',this.value)">
+        </div>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Mark</label>
+          <div class="pillrow">
+            <button class="pill" aria-pressed="${p.mark==='X'}" onclick="App.updatePlayer('${key}','mark','X')">X</button>
+            <button class="pill" aria-pressed="${p.mark==='O'}" onclick="App.updatePlayer('${key}','mark','O')">O</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Avatar</label>
+          <div class="avatar-grid">
+            ${AVATARS.map(a=>`<button class="avatar-opt" aria-pressed="${p.avatar===a}" onclick="App.updatePlayer('${key}','avatar','${a}')">${a}</button>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  }
+  function aiDifficultyPicker(){
+    const s = state.setup;
+    return `
+      <div style="padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:14px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>AI Difficulty</label>
+          <div class="pillrow">
+            <button class="pill" aria-pressed="${s.difficulty==='easy'}" onclick="App.setDifficulty('easy')">Easy</button>
+            <button class="pill" aria-pressed="${s.difficulty==='medium'}" onclick="App.setDifficulty('medium')">Medium</button>
+            <button class="pill" aria-pressed="${s.difficulty==='hard'}" onclick="App.setDifficulty('hard')">Hard</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /* ---------- MATCH ---------- */
+  function beginMatch(){
+    const s = state.setup;
+    const p1 = { ...s.p1 }, p2 = s.mode==='ai' ? { name:'AI · '+cap(s.difficulty), mark: s.p1.mark==='X'?'O':'X', avatar:'🤖' } : { ...s.p2 };
+    // ensure marks differ
+    if(p1.mark===p2.mark) p2.mark = p1.mark==='X'?'O':'X';
+    let first = s.firstMove;
+    if(first==='random') first = Math.random()<0.5?'p1':'p2';
+    const startingMark = first==='p1'? p1.mark : p2.mark;
+    state.match = {
+      mode: s.mode, size:s.size, winLen:s.winLen, difficulty:s.difficulty,
+      timer:s.timer, customTimer:parseInt(s.customTimer)||30, bestOf:s.bestOf,
+      p1, p2, seriesScore:{p1:0,p2:0}, seriesGame:1,
+      game: (()=>{ const g = createGame(s.size,s.winLen); g.current = startingMark; return g; })(),
+      startedAt: Date.now(), timeLeft: null, timerHandle:null, aiThinking:false,
+      canUndo: s.mode!=='online'
+    };
+    Sound.matchStart();
+    go('match');
+    if(state.match.mode==='ai' && state.match.game.current===state.match.p2.mark) setTimeout(aiTurn, 500);
+    startTimerIfNeeded();
+  }
+  function cap(w){ return w[0].toUpperCase()+w.slice(1); }
+
+  function activePlayer(){
+    const m = state.match;
+    return m.game.current === m.p1.mark ? m.p1 : m.p2;
+  }
+  function opponentOf(p){ const m=state.match; return p===m.p1?m.p2:m.p1; }
+
+  function screenMatch(){
+    const m = state.match;
+    const g = m.game;
+    const gridCols = `repeat(${g.size},1fr)`;
+    const cellFont = g.size===3?'54px':(g.size===4?'40px':'30px');
+    const p1active = g.current===m.p1.mark && !g.winner && !g.isDraw;
+    const p2active = g.current===m.p2.mark && !g.winner && !g.isDraw;
+    return `
+    <div class="screen">
+      <a href="#" class="back-link" onclick="App.confirmExit();return false;">← Exit match</a>
+      <div class="match-head">
+        <div class="player-chip ${m.p1.mark.toLowerCase()} ${p1active?'active':''}"><span class="av">${m.p1.avatar}</span><div><div class="nm">${m.p1.name}</div><div class="mk">${m.p1.mark}</div></div></div>
+        <div class="vs">VS</div>
+        <div class="player-chip ${m.p2.mark.toLowerCase()} ${p2active?'active':''}"><span class="av">${m.p2.avatar}</span><div><div class="nm">${m.p2.name}</div><div class="mk">${m.p2.mark}</div></div></div>
+      </div>
+      ${m.bestOf>1?`<div class="scoreboard"><div class="score-pill x"><div class="n">${m.seriesScore.p1}</div><div class="l">${m.p1.name}</div></div><div class="score-pill"><div class="n">${m.seriesGame}/${m.bestOf}</div><div class="l">Game</div></div><div class="score-pill o"><div class="n">${m.seriesScore.p2}</div><div class="l">${m.p2.name}</div></div></div>`:''}
+      ${m.timer!=='none'&&m.timeLeft!=null?`<div class="timerbar ${m.timeLeft<=5?'low':''}"><div class="fill" style="width:${Math.max(0,m.timeLeft/timerDuration()*100)}%"></div></div>`:''}
+      <div class="status-line ${m.aiThinking?'thinking':''}">${statusText()}</div>
+      <div class="board-wrap">
+        <div class="board" style="grid-template-columns:${gridCols};">
+          ${g.cells.map((c,i)=>{
+            const isWin = g.winningLine && g.winningLine.includes(i);
+            return `<button class="cell ${c?('filled '+c.toLowerCase()):''} ${isWin?'winning':''}" style="font-size:${cellFont};" onclick="App.playCell(${i})" ${c||g.winner||g.isDraw?'disabled':''} aria-label="Cell ${i+1}${c?', '+c:', empty'}">${c?`<span class="mark">${c}</span>`:''}</button>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="game-actions">
+        ${m.canUndo?`<button class="btn ghost" onclick="App.undo()" ${g.history.length===0||g.winner||g.isDraw?'disabled':''}>↩ Undo</button>`:''}
+        <button class="btn ghost" onclick="App.newGame()">New Game</button>
+        <button class="btn" onclick="App.rematch()">🔁 Rematch</button>
+      </div>
+    </div>`;
+  }
+  function timerDuration(){ const m=state.match; return m.timer==='custom'?m.customTimer:parseInt(m.timer); }
+  function statusText(){
+    const m = state.match, g = m.game;
+    if(g.winner){ const w = g.winner===m.p1.mark?m.p1:m.p2; return `🎉 ${w.name} wins!`; }
+    if(g.isDraw) return `🤝 It's a draw!`;
+    if(m.aiThinking) return `AI is thinking<span class="dots"></span>`;
+    return `${activePlayer().name}'s turn (${g.current})`;
+  }
+
+  function playCell(idx){
+    const m = state.match, g = m.game;
+    if(g.cells[idx] || g.winner || g.isDraw || m.aiThinking) return;
+    const mark = g.current;
+    g.place(idx);
+    mark==='X'?Sound.moveX():Sound.moveO();
+    stopTimer();
+    render();
+    handlePostMove();
+    if(!g.winner && !g.isDraw){
+      startTimerIfNeeded();
+      if(m.mode==='ai' && g.current===m.p2.mark) setTimeout(aiTurn, 450);
+    }
+  }
+  function aiTurn(){
+    const m = state.match, g = m.game;
+    if(g.winner||g.isDraw) return;
+    m.aiThinking = true; render();
+    const thinkTime = m.difficulty==='hard'? 500+Math.random()*400 : 300+Math.random()*250;
+    setTimeout(()=>{
+      const idx = AI.getMove(g, m.difficulty);
+      m.aiThinking = false;
+      if(idx==null){ render(); return; }
+      g.place(idx);
+      Sound.aiMove();
+      stopTimer();
+      render();
+      handlePostMove();
+      if(!g.winner && !g.isDraw) startTimerIfNeeded();
+    }, thinkTime);
+  }
+  function handlePostMove(){
+    const m = state.match, g = m.game;
+    if(g.winner){
+      Sound.win();
+      const winner = g.winner===m.p1.mark?'p1':'p2';
+      m.seriesScore[winner]++;
+      confettiBurst();
+      setTimeout(()=>showResult(), 550);
+    } else if(g.isDraw){
+      Sound.draw();
+      setTimeout(()=>showResult(), 400);
+    }
+  }
+  function showResult(){
+    const m = state.match, g = m.game;
+    const seriesDone = m.bestOf>1 && Math.max(m.seriesScore.p1,m.seriesScore.p2) > m.bestOf/2;
+    let title, sub, big;
+    if(g.winner){
+      const w = g.winner===m.p1.mark?m.p1:m.p2;
+      big = '🏆'; title = `${w.name} wins!`;
+      sub = m.bestOf>1 ? `Series: ${m.p1.name} ${m.seriesScore.p1} – ${m.seriesScore.p2} ${m.p2.name}` : 'Great game.';
+    } else {
+      big='🤝'; title="It's a draw!"; sub='Nobody wins this round.';
+    }
+    recordIfNeeded();
+    const overlay = document.createElement('div');
+    overlay.className='overlay';
+    overlay.innerHTML = `
+      <div class="result-card">
+        <div class="big">${big}</div>
+        <h2>${title}</h2>
+        <p>${sub}${seriesDone?' — series complete!':''}</p>
+        <div class="btn-row" style="justify-content:center;">
+          ${!seriesDone && m.bestOf>1 ? `<button class="btn primary" id="nextGameBtn">Next Game →</button>` : `<button class="btn primary" id="rematchBtn">🔁 Rematch</button>`}
+          <button class="btn ghost" id="homeBtn2">Home</button>
+        </div>
+      </div>`;
+    overlayRoot.appendChild(overlay);
+    overlay.querySelector('#homeBtn2').onclick = ()=>{ overlay.remove(); go('home'); };
+    const nb = overlay.querySelector('#nextGameBtn');
+    if(nb) nb.onclick = ()=>{ overlay.remove(); nextSeriesGame(); };
+    const rb = overlay.querySelector('#rematchBtn');
+    if(rb) rb.onclick = ()=>{ overlay.remove(); rematch(); };
+  }
+  function recordIfNeeded(){
+    const m = state.match, g = m.game;
+    if(m.mode==='online') return; // online results recorded via server events
+    let result = 'draw';
+    if(g.winner){
+      const humanIsP1 = true; // in local/AI, p1 is treated as "you" for stats purposes in AI mode
+      if(m.mode==='ai'){
+        result = g.winner===m.p1.mark ? 'win':'loss';
+      } else {
+        result = 'draw'; // local 2P doesn't affect personal W/L rating, only games played
+      }
+    }
+    const duration = Math.round((Date.now()-m.startedAt)/1000);
+    let ratingChange = null;
+    if(m.mode==='ai' && m.difficulty){
+      const base = m.difficulty==='easy'?4:(m.difficulty==='medium'?8:14);
+      ratingChange = result==='win'? base : (result==='loss'? -Math.round(base*0.6) : 1);
+    }
+    Storage.recordResult(m.mode==='ai'?result:'draw', ratingChange, {opponent: m.mode==='ai'?m.p2.name:`${m.p1.name} vs ${m.p2.name}`, mode: m.mode==='ai'?`AI (${cap(m.difficulty)})`:'Local 2P', duration});
+  }
+  function nextSeriesGame(){
+    const m = state.match;
+    m.seriesGame++;
+    const nextStart = m.seriesGame%2===0 ? (m.p1.mark) : m.p2.mark; // alternate who starts
+    m.game = (()=>{ const g=createGame(m.size,m.winLen); g.current = m.game.winner? (m.game.winner===m.p1.mark?m.p2.mark:m.p1.mark) : nextStart; return g; })();
+    render();
+    startTimerIfNeeded();
+    if(m.mode==='ai' && m.game.current===m.p2.mark) setTimeout(aiTurn,500);
+  }
+  function newGame(){ beginMatch(); }
+  function rematch(){
+    const m = state.match;
+    m.seriesScore={p1:0,p2:0}; m.seriesGame=1;
+    m.game = (()=>{ const g=createGame(m.size,m.winLen); g.current = m.p1.mark; return g; })();
+    m.startedAt = Date.now();
+    render();
+    startTimerIfNeeded();
+    if(m.mode==='ai' && m.game.current===m.p2.mark) setTimeout(aiTurn,500);
+  }
+  function undo(){
+    const m = state.match;
+    if(!m.canUndo) return;
+    m.game.undo();
+    if(m.mode==='ai' && m.game.current===m.p2.mark) m.game.undo(); // undo AI move too so it's human's turn again
+    stopTimer(); render(); startTimerIfNeeded();
+  }
+  function confirmExit(){ stopTimer(); go('home'); }
+
+  function startTimerIfNeeded(){
+    const m = state.match;
+    if(!m || m.timer==='none' || m.game.winner || m.game.isDraw) return;
+    m.timeLeft = timerDuration();
+    render();
+    m.timerHandle = setInterval(()=>{
+      m.timeLeft--;
+      if(m.timeLeft<=5 && m.timeLeft>0) Sound.countdown();
+      if(m.timeLeft<=0){
+        stopTimer();
+        // time's up: current player forfeits the point; auto-place a random move as fallback for local play continuity
+        const g = m.game;
+        const idx = emptyIndices(g.cells)[0];
+        if(idx!=null){
+          const forfeiter = g.current;
+          g.winner = forfeiter==='X'?'O':'X'; // opponent wins on timeout
+          g.winningLine = null;
+          Sound.draw();
+          render();
+          setTimeout(()=>showResult(),400);
+        }
+        return;
+      }
+      renderTimerOnly();
+    },1000);
+  }
+  function stopTimer(){ const m=state.match; if(m&&m.timerHandle){ clearInterval(m.timerHandle); m.timerHandle=null; } }
+  function renderTimerOnly(){
+    const bar = document.querySelector('.timerbar .fill');
+    const wrap = document.querySelector('.timerbar');
+    const status = document.querySelector('.status-line');
+    if(bar && state.match){ bar.style.width = Math.max(0,state.match.timeLeft/timerDuration()*100)+'%'; wrap.classList.toggle('low', state.match.timeLeft<=5); }
+  }
+
+  function confettiBurst(){
+    if(!Storage.get().settings.animations) return;
+    const colors=['var(--x)','var(--o)','var(--win)','var(--accent)'];
+    for(let i=0;i<26;i++){
+      const p=document.createElement('div');
+      p.className='confetti-piece';
+      p.style.left=(Math.random()*100)+'vw';
+      p.style.background=colors[i%colors.length];
+      p.style.animationDuration=(1.6+Math.random()*1.2)+'s';
+      p.style.opacity = .85;
+      document.body.appendChild(p);
+      setTimeout(()=>p.remove(), 3200);
+    }
+  }
+
+  /* ---------- ONLINE HUB ---------- */
+  let onlineState = { view:'hub', roomCode:null, searching:false, matched:false, opponent:null, connErr:null };
+  function screenOnlineHub(){
+    const connected = Online.isConnected();
+    return `
+    <div class="screen">
+      ${topbarSimple('🌍 Online Worldwide')}
+      <div class="card panel">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span class="status-dot ${connected?'online':'offline'}"></span>
+          <strong style="font-size:13.5px;">${connected? 'Connected to '+Online.getServerUrl() : 'Not connected to a server'}</strong>
+        </div>
+        <p class="sub" style="margin-top:6px;">Online play is server-authoritative: moves are validated on the backend so results can't be spoofed. ${connected?'':'Set a server URL in Settings → Multiplayer Server, or run the included backend locally.'}</p>
+        ${!connected?`<div class="btn-row"><button class="btn primary" onclick="App.go('settings')">⚙️ Configure Server</button></div>`:''}
+      </div>
+      <div class="quick-row">
+        <button class="card quick-card" ${!connected?'disabled':''} onclick="App.findOpponent()"><span class="qi">🌍</span><div><div class="qt">Find Opponent</div><div class="qs">Quick match, worldwide</div></div></button>
+        <button class="card quick-card" ${!connected?'disabled':''} onclick="App.createRoom()"><span class="qi">🔑</span><div><div class="qt">Create Room</div><div class="qs">Get a shareable code</div></div></button>
+        <button class="card quick-card" ${!connected?'disabled':''} onclick="App.showJoinRoom()"><span class="qi">🚪</span><div><div class="qt">Join Room</div><div class="qs">Enter a friend's code</div></div></button>
+      </div>
+      <div class="section-title"><h2>🏆 Global Leaderboard</h2><button class="btn ghost" onclick="App.go('leaderboard')">View all</button></div>
+      <div class="card" style="padding:6px 16px;">${leaderboardPreviewRows()}</div>
+    </div>`;
+  }
+  function findOpponent(){
+    if(!Online.isConnected()) return toast('Connect to a server first.');
+    const overlay = document.createElement('div');
+    overlay.className='overlay';
+    overlay.innerHTML = `<div class="result-card"><div class="spinner"></div><h2>Searching for opponent…</h2><p>Matching you with another player worldwide.</p><div class="btn-row" style="justify-content:center;"><button class="btn ghost" id="cancelSearch">Cancel</button></div></div>`;
+    overlayRoot.appendChild(overlay);
+    Online.send('find_opponent', { profile: Storage.get().profile, rating: Storage.get().stats.rating });
+    const offMatched = (data)=>{ overlay.remove(); Sound.found(); startOnlineMatch(data); };
+    Online.on('matched', offMatched);
+    overlay.querySelector('#cancelSearch').onclick = ()=>{ Online.send('cancel_search'); overlay.remove(); };
+    Online.on('error_message', (m)=>{ overlay.remove(); toast(m.message||'Matchmaking unavailable.'); });
+  }
+  function createRoom(){
+    if(!Online.isConnected()) return toast('Connect to a server first.');
+    Online.send('create_room', { profile: Storage.get().profile, rating: Storage.get().stats.rating });
+    Online.on('room_created', (data)=>{
+      const overlay = document.createElement('div');
+      overlay.className='overlay';
+      overlay.innerHTML = `<div class="result-card"><h2>Room Created</h2><p>Share this code with your opponent.</p><div class="roomcode">${data.code}</div><p style="font-size:12px;">Waiting for opponent to join…</p><div class="btn-row" style="justify-content:center;"><button class="btn ghost" id="cancelRoom">Cancel</button></div></div>`;
+      overlayRoot.appendChild(overlay);
+      overlay.querySelector('#cancelRoom').onclick=()=>{ Online.send('leave_room',{code:data.code}); overlay.remove(); };
+      Online.on('matched', (m)=>{ overlay.remove(); Sound.found(); startOnlineMatch(m); });
+    });
+  }
+  function showJoinRoom(){
+    if(!Online.isConnected()) return toast('Connect to a server first.');
+    const overlay = document.createElement('div');
+    overlay.className='overlay';
+    overlay.innerHTML = `<div class="result-card"><h2>Join Room</h2><p>Enter the room code your opponent shared.</p>
+      <input type="text" id="joinCodeInput" maxlength="6" placeholder="A7K92P" style="width:100%;text-align:center;letter-spacing:4px;text-transform:uppercase;font-family:var(--font-mono);font-size:20px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg-2);color:var(--text);margin:10px 0 16px;">
+      <div class="btn-row" style="justify-content:center;"><button class="btn primary" id="joinBtn">Join</button><button class="btn ghost" id="cancelJoin">Cancel</button></div></div>`;
+    overlayRoot.appendChild(overlay);
+    overlay.querySelector('#cancelJoin').onclick=()=>overlay.remove();
+    overlay.querySelector('#joinBtn').onclick=()=>{
+      const code = overlay.querySelector('#joinCodeInput').value.trim().toUpperCase();
+      if(!code) return;
+      Online.send('join_room', { code, profile: Storage.get().profile, rating: Storage.get().stats.rating });
+      Online.on('room_error', (e)=>toast(e.message||'Room not found.'));
+      Online.on('matched', (m)=>{ overlay.remove(); Sound.found(); startOnlineMatch(m); });
+    };
+  }
+  function startOnlineMatch(data){
+    // data: { you:{mark,profile}, opponent:{profile,rating}, size, winLen, roomId }
+    const you = data.you, opp = data.opponent;
+    state.match = {
+      mode:'online', size:data.size||3, winLen:data.winLen||3, roomId: data.roomId,
+      p1: you.mark==='X'? {name:you.profile.name,mark:'X',avatar:you.profile.avatar} : {name:opp.profile.name,mark:'X',avatar:opp.profile.avatar},
+      p2: you.mark==='O'? {name:you.profile.name,mark:'O',avatar:you.profile.avatar} : {name:opp.profile.name,mark:'O',avatar:opp.profile.avatar},
+      seriesScore:{p1:0,p2:0}, seriesGame:1, bestOf:1, timer:'none',
+      game:(()=>{const g=createGame(data.size||3,data.winLen||3); g.current='X'; return g;})(),
+      startedAt:Date.now(), youMark: you.mark, opponentRating: opp.rating||1200, canUndo:false
+    };
+    go('match');
+    Online.on('move_made', (m)=>{
+      const g = state.match.game;
+      if(g.cells[m.index]) return;
+      g.place(m.index);
+      (g.current==='X'?Sound.moveO:Sound.moveX)();
+      render();
+      if(g.winner || g.isDraw){ if(g.winner) confettiBurst(); setTimeout(showOnlineResult,500); }
+    });
+    Online.on('opponent_left', ()=>{ toast('Opponent disconnected.'); });
+    Online.on('game_over', (r)=>{ /* server-confirmed result with rating deltas */ pendingServerResult = r; });
+  }
+  let pendingServerResult = null;
+  function showOnlineResult(){
+    const r = pendingServerResult;
+    const m = state.match, g = m.game;
+    let title,big,sub;
+    if(g.winner){ const w = g.winner===m.youMark? 'You' : opponentOf({mark:m.youMark}).name; title = g.winner===m.youMark?'You win! 🏆':'You lost'; big = g.winner===m.youMark?'🏆':'💥'; }
+    else { title="It's a draw!"; big='🤝'; }
+    sub = r && typeof r.ratingChange==='number' ? '' : 'Result recorded locally — connect ratingChange from server for live ELO.';
+    if(r) Storage.recordResult(g.winner? (g.winner===m.youMark?'win':'loss') : 'draw', r.ratingChange, {opponent:(m.youMark==='X'?m.p2.name:m.p1.name), mode:'Online', duration:Math.round((Date.now()-m.startedAt)/1000)});
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    overlay.innerHTML=`<div class="result-card"><div class="big">${big}</div><h2>${title}</h2>
+      ${r&&typeof r.ratingChange==='number'?`<div class="delta ${r.ratingChange>=0?'up':'down'}">${r.ratingChange>=0?'+':''}${r.ratingChange} Rating</div>`:''}
+      <p>${sub}</p>
+      <div class="btn-row" style="justify-content:center;"><button class="btn primary" id="rq">Rematch</button><button class="btn ghost" id="ho">Home</button></div></div>`;
+    overlayRoot.appendChild(overlay);
+    overlay.querySelector('#ho').onclick=()=>{overlay.remove();go('home');};
+    overlay.querySelector('#rq').onclick=()=>{overlay.remove(); Online.send('rematch_request',{roomId:m.roomId}); toast('Rematch request sent.');};
+  }
+
+  /* ---------- LEADERBOARD / STATS / SETTINGS ---------- */
+  function screenLeaderboard(){
+    const rows = localLeaderboard();
+    return `<div class="screen">${topbarSimple('🏆 Worldwide Leaderboard')}
+      <div class="card panel">
+        <p class="sub">This device shows your local ranking only. A full worldwide board (all players, live) requires the shared backend from the project's server component — see Settings → Multiplayer Server for connection details.</p>
+        ${rows.length? rows.map((r,i)=>`<div class="lb-row"><div class="lb-rank">${i+1}</div><div class="lb-name">${r.avatar} ${r.name}</div><div class="lb-rating">⭐${r.rating}</div><div class="lb-record">${r.wins}W-${r.losses}L-${r.draws}D</div></div>`).join('') : '<p style="color:var(--muted);padding:14px 0;">No ranked matches recorded yet.</p>'}
+      </div>
+    </div>`;
+  }
+  function screenStats(){
+    const st = Storage.get().stats;
+    const hist = Storage.get().history;
+    return `<div class="screen">${topbarSimple('📊 My Statistics')}
+      <div class="stat-grid" style="margin-bottom:20px;">
+        <div class="card stat-box"><div class="v">${st.total}</div><div class="l">Total Games</div></div>
+        <div class="card stat-box"><div class="v">${st.wins}</div><div class="l">Wins</div></div>
+        <div class="card stat-box"><div class="v">${st.losses}</div><div class="l">Losses</div></div>
+        <div class="card stat-box"><div class="v">${st.draws}</div><div class="l">Draws</div></div>
+        <div class="card stat-box"><div class="v">${winPct(st)}%</div><div class="l">Win Rate</div></div>
+        <div class="card stat-box"><div class="v">${st.streak}</div><div class="l">Current Streak</div></div>
+        <div class="card stat-box"><div class="v">${st.bestStreak}</div><div class="l">Best Streak</div></div>
+        <div class="card stat-box"><div class="v">⭐${st.rating}</div><div class="l">Rating</div></div>
+      </div>
+      <div class="section-title"><h2>Match History</h2></div>
+      <div class="card panel">
+        ${hist.length? hist.map(h=>`<div class="hist-row"><span>${h.opponent}</span><span class="mono" style="color:var(--muted);">${h.mode}</span><span class="hist-badge ${h.result}">${h.result.toUpperCase()}</span><span class="mono">${h.ratingChange? (h.ratingChange>0?'+':'')+h.ratingChange : ''}</span><span style="color:var(--muted);">${new Date(h.date).toLocaleDateString()}</span></div>`).join('') : '<p style="color:var(--muted);">No matches yet — go win some games.</p>'}
+      </div>
+    </div>`;
+  }
+  function screenSettings(){
+    const s = Storage.get().settings, p = Storage.get().profile;
+    return `<div class="screen">${topbarSimple('⚙️ Settings')}
+      <div class="card panel">
+        <h2>Profile</h2><div class="sub">Used across Local, AI, and Online modes.</div>
+        <div class="field"><label>Name</label><input type="text" value="${p.name}" maxlength="16" oninput="App.updateProfile('name',this.value)"></div>
+        <div class="field"><label>Avatar</label><div class="avatar-grid">${AVATARS.map(a=>`<button class="avatar-opt" aria-pressed="${p.avatar===a}" onclick="App.updateProfile('avatar','${a}')">${a}</button>`).join('')}</div></div>
+      </div>
+      <div class="card panel">
+        <h2>Appearance</h2>
+        <div class="field"><label>Theme</label><div class="pillrow">
+          <button class="pill" aria-pressed="${s.theme==='classic'}" onclick="App.setTheme('classic')">Classic</button>
+          <button class="pill" aria-pressed="${s.theme==='neon'}" onclick="App.setTheme('neon')">Neon</button>
+          <button class="pill" aria-pressed="${s.theme==='glass'}" onclick="App.setTheme('glass')">Glassmorphism</button>
+        </div></div>
+        <div class="switch"><div><div class="label">🌙 Dark / ☀️ Light</div><div class="desc">Applies to the Classic theme.</div></div>
+          <button class="toggle" aria-pressed="${s.mode==='light'}" onclick="App.toggleMode()"><span class="knob"></span></button></div>
+        <div class="switch"><div><div class="label">Animations</div><div class="desc">Confetti, winning-line pulse, motion.</div></div>
+          <button class="toggle" aria-pressed="${s.animations}" onclick="App.toggleSetting('animations')"><span class="knob"></span></button></div>
+      </div>
+      <div class="card panel">
+        <h2>Sound</h2>
+        <div class="switch"><div><div class="label">🔊 Sound Effects</div><div class="desc">Moves, wins, matchmaking cues.</div></div>
+          <button class="toggle" aria-pressed="${s.sound}" onclick="App.toggleSetting('sound')"><span class="knob"></span></button></div>
+      </div>
+      <div class="card panel">
+        <h2>Multiplayer Server</h2>
+        <div class="sub">Online Worldwide needs a running TacTix backend (Node.js + Socket.io — included separately with full setup instructions). Paste its URL below to connect this browser to it.</div>
+        <div class="field"><label>Server URL</label><input type="text" id="serverUrlInput" placeholder="https://your-tactix-server.onrender.com" value="${Online.getServerUrl()}"></div>
+        <div class="btn-row"><button class="btn primary" onclick="App.connectServer()">Connect</button><button class="btn ghost" onclick="App.disconnectServer()">Disconnect</button></div>
+        <p class="footnote" style="text-align:left;margin-top:10px;">Running it locally? Start the backend, then use <span class="mono">http://localhost:3001</span> here.</p>
+      </div>
+      <div class="card panel">
+        <h2>Data</h2>
+        <div class="btn-row"><button class="btn danger" onclick="App.resetData()">Reset local data (stats, history, settings)</button></div>
+      </div>
+    </div>`;
+  }
+
+  /* ---------- public actions bound to onclick ---------- */
+  function updatePlayer(key, field, val){ state.setup[key][field] = val; render(); }
+  function updateProfile(field, val){ Storage.setProfile({[field]:val}); if(state.setup.p1) state.setup.p1[field]=val; render(); }
+  function setFirst(v){ state.setup.firstMove = v; render(); }
+  function setBoard(size, winLen){ state.setup.size=size; state.setup.winLen = size===3?3:4; render(); }
+  function setTimer(t){ state.setup.timer=t; render(); }
+  function setCustomTimer(v){ state.setup.customTimer = Math.max(5,parseInt(v)||30); }
+  function setBestOf(n){ state.setup.bestOf=n; render(); }
+  function setDifficulty(d){ state.setup.difficulty=d; render(); }
+  function setTheme(t){ Storage.setSettings({theme:t}); applyTheme(); render(); }
+  function toggleMode(){ const s=Storage.get().settings; Storage.setSettings({mode: s.mode==='dark'?'light':'dark'}); applyTheme(); render(); }
+  function toggleSetting(key){ const s=Storage.get().settings; Storage.setSettings({[key]: !s[key]}); render(); }
+  function resetData(){ if(confirm('This clears stats, history, and settings on this device. Continue?')){ Storage.resetAll(); applyTheme(); toast('Local data reset.'); go('home'); } }
+  function connectServer(){
+    const url = document.getElementById('serverUrlInput').value.trim();
+    if(!url) return toast('Enter a server URL first.');
+    toast('Connecting…');
+    Online.connect(url).then(()=>{ toast('Connected to server ✅'); render(); }).catch(()=>{ toast('Unable to connect to server.'); render(); });
+  }
+  function disconnectServer(){ Online.disconnect(); toast('Disconnected.'); render(); }
+
+  function render(){
+    applyTheme();
+    let html='';
+    if(state.screen==='home') html = screenHome();
+    else if(state.screen==='setup') html = screenSetup();
+    else if(state.screen==='match') html = screenMatch();
+    else if(state.screen==='leaderboard') html = screenLeaderboard();
+    else if(state.screen==='stats') html = screenStats();
+    else if(state.screen==='settings') html = screenSettings();
+    root.innerHTML = html;
+  }
+
+  return {
+    go, startSetup, beginMatch, updatePlayer, updateProfile, setFirst, setBoard, setTimer, setCustomTimer,
+    setBestOf, setDifficulty, playCell, undo, newGame, rematch, confirmExit,
+    setTheme, toggleMode, toggleSetting, resetData, connectServer, disconnectServer,
+    findOpponent, createRoom, showJoinRoom, render
+  };
+})();
+App.render();
+</script>
+</body>
+</html>
